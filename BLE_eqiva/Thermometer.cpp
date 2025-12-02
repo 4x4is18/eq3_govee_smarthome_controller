@@ -1,22 +1,35 @@
 #include "Thermometer.h"
 
-#include <vector>    // <--- WICHTIG für std::vector
-
-class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
-  void onResult(BLEAdvertisedDevice advertisedDevice) 
-  {
-
-    if (advertisedDevice.getAddress().toString().equals("a4:c1:38:5e:c4:6e")) 
-    {
+void Thermometer::MyAdvertisedDeviceCallbacks::onResult(BLEAdvertisedDevice advertisedDevice) {
+    
+    if (advertisedDevice.getAddress().toString().equals("a4:c1:38:5e:c4:6e")){
       Serial.println(advertisedDevice.getAddress().toString());
-
     } else {
       return;
     }
-    int len=advertisedDevice.getPayloadLength();
-    uint8_t* dp=advertisedDevice.getPayload();
 
-    for (int i = 0; i < len; i++) 
+    int len = advertisedDevice.getPayloadLength();
+    uint8_t* dp = advertisedDevice.getPayload();
+    parent->decodeGovee(len, dp);     // funktioniert!
+}
+
+Thermometer::Thermometer(PubSubClient* _mqttClient){
+  mqttClient = _mqttClient; 
+}
+
+void Thermometer::setBLEScanner(BLEScan* _pBLEScan){
+  pBLEScan = _pBLEScan;
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(this),true);
+}
+
+void Thermometer::scan(){
+  pBLEScan->start(5, false);
+  pBLEScan->clearResults();  // delete results fromBLEScan buffer to release memory
+}
+
+void Thermometer::decodeGovee(int len,uint8_t* dp){
+
+      for (int i = 0; i < len; i++) 
     {
      // Serial.printf("i %d len %d\n",i,len);
       int flen,ftype; 
@@ -44,6 +57,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
       float	Humidity = float(iTemp % 1000) / 10.0;
       int Battery = int(dp[i+6]);
       Serial.printf("T %3.1f H %3.1f B %d\n",Temperature,Humidity,Battery);
+      publishGovee(goveeToJson(Temperature,Humidity,Battery,"a4:c1:38:5e:c4:6e"));
 
       }
       else
@@ -58,25 +72,28 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
         float Humidity = float(iHumidity) / 100.0;
         int Battery = int(dp[i+7]);
       Serial.printf("T %3.1f H %3.1f B %d\n",Temperature,Humidity,Battery);
+      publishGovee(goveeToJson(Temperature,Humidity,Battery,"a4:c1:38:5e:c4:6e"));
       }
       i+=flen-1;
    }
-  }
-};
-
-Thermometer::Thermometer(){
-    
 }
 
-void Thermometer::setBLEScanner(BLEScan* _pBLEScan){
-  pBLEScan = _pBLEScan;
-  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(),true);
+const char* Thermometer::goveeToJson(float temperature, float humidity, int battery, const char* mac) {
+    static char json[160];  // ausreichend groß
+
+    snprintf(json, sizeof(json),
+             "{\"temperature\": %.1f, \"humidity\": %.1f, \"battery\": %d, \"mac\": \"%s\"}",
+             temperature,
+             humidity,
+             battery,
+             mac
+    );
+
+    return json;
 }
 
-void Thermometer::scan(){
-  pBLEScan->start(5, false);
-  //Serial.print("Devices found: ");
-  //Serial.println(foundDevices->getCount());
-  //Serial.println("Scan done!");
-  pBLEScan->clearResults();  // delete results fromBLEScan buffer to release memory
+void Thermometer::publishGovee(const char* message) {
+  if (mqttClient && mqttClient->connected()) {
+        mqttClient->publish("test/topic", message);
+    }
 }

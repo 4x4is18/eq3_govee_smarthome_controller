@@ -1,9 +1,6 @@
 #include "TheNetwork.h"
 
-TheNetwork::TheNetwork():client(espClient){
-    
-}
-
+TheNetwork::TheNetwork():client(espClient){}
 
 void TheNetwork::connectMQTT(const char* mqttServer, const int mqttPort) {
     client.setServer(mqttServer, mqttPort);
