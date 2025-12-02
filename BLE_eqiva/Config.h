@@ -16,5 +16,4 @@ const char* EQIVA_BURO = "";
 
 // Temperatur
 const char* GOVEE_BURO = "";
-
 #endif
