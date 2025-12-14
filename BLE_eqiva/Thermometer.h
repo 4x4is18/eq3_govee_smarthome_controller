@@ -10,10 +10,11 @@
 #include <BLEBeacon.h>
 #include <BLEUtils.h>
 #include <PubSubClient.h>
+#include "DeviceConfig.h"
 
 class Thermometer {
   public:
-    Thermometer(PubSubClient* client);
+    Thermometer(PubSubClient* client, DeviceConfig* deviceConfig, int length);
     void setBLEScanner(BLEScan* _pBLEScan);
     void scan();
 
@@ -28,13 +29,13 @@ class Thermometer {
     private:
         Thermometer* parent;
     };
-
+    DeviceConfig* deviceConfig;
+    int deviceCount;
     void reconnectMQTT();
     BLEScan* pBLEScan;
     PubSubClient* mqttClient;
-    void decodeGovee(int len, uint8_t* dp);
-    void publishGovee(const char* message);
-    const char* goveeToJson(float temperature, float humidity, int battery, const char* mac);
+    void decodeGovee(int len, uint8_t* dp, int deviceIndex);
+    void publishGovee(float temperature, float humidity, int battery, int deviceIndex);
 };
 
 #endif

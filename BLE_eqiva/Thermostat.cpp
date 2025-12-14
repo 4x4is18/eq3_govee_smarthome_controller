@@ -4,8 +4,7 @@
 #define WRITE_UUID "3fa4585a-ce4a-3bad-db4b-b8df8179ea09"
 #define NOTIFY_UUID "d0e8434d-cd29-0996-af41-6c90f4e0eb2a"
 
-Thermostat::Thermostat(String _mac, PubSubClient* client) {
-  mac = _mac;
+Thermostat::Thermostat(DeviceConfig& _deviceConfig, PubSubClient* client) : deviceConfig(_deviceConfig) {
   BLEUUID _serviceUUID(SERVICE_UUID);
   serviceUUID = _serviceUUID;
   BLEUUID _writeUUID(WRITE_UUID);
@@ -17,6 +16,11 @@ Thermostat::Thermostat(String _mac, PubSubClient* client) {
   notifyChar = nullptr;
   mqttClient = client; 
 
+  char topic[100];
+  snprintf(topic, sizeof(topic),"home/%s/%s/%s/#",deviceConfig.room,deviceConfig.id,deviceConfig.deviceType);
+
+  mqttClient->subscribe(topic);
+  
   if (!connectToThermostat()) return;
   if (!setupCharacteristic()) return;
 
@@ -24,7 +28,7 @@ Thermostat::Thermostat(String _mac, PubSubClient* client) {
 
 bool Thermostat::connectToThermostat() {
     pClient = BLEDevice::createClient();
-    if (!pClient->connect(BLEAddress(mac))) {
+    if (!pClient->connect(BLEAddress(deviceConfig.macAddress))) {
         return false;
     }
     return true;
@@ -124,6 +128,11 @@ void Thermostat::publishStatus(const char* message) {
     }
 }
 
+String Thermostat::getThermostatID() {
+        return String(deviceConfig.id);  // ID als String zurückgeben
+}
+
+
 const char* Thermostat::toJson(bool isLocked, String mode, bool windowOpen, uint8_t valvePercent, float temperature) {
     // Statischer Puffer, bleibt nach Funktionsende erhalten
     static char json[128];
@@ -137,4 +146,29 @@ const char* Thermostat::toJson(bool isLocked, String mode, bool windowOpen, uint
              temperature);
 
     return json;
+}
+
+void Thermostat::handleCommand(char* topic, byte* payload, unsigned int length) {
+
+    String command = extractCommand(topic);  // Command aus Topic extrahieren
+
+    if (command == "setTemperature") {
+        float temp = String((char*)payload, length).toFloat();
+        setTemperature(temp);
+    } else if (command == "getStatus") {
+        //publishStatus();
+    } else if (command == "setLock") {
+        //lock();
+    } else if (command == "boost") {
+        //boostMode();
+    }
+}
+
+String Thermostat::extractCommand(const char* topic) {
+    String t(topic);
+    int lastSlash = t.lastIndexOf('/');                     // letzter Slash
+    if (lastSlash == -1) return "";                        // ungültiges Format
+
+    String command = t.substring(lastSlash + 1);           // alles nach letztem Slash
+    return command;
 }

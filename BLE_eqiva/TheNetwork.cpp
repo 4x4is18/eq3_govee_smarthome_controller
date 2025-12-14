@@ -5,6 +5,7 @@ TheNetwork::TheNetwork():client(espClient){}
 void TheNetwork::connectMQTT(const char* mqttServer, const int mqttPort) {
     client.setServer(mqttServer, mqttPort);
     reconnectMQTT();
+
 }
 
 void TheNetwork::reconnectMQTT() {
