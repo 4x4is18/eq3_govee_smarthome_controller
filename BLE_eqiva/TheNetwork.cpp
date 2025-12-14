@@ -20,7 +20,17 @@ void TheNetwork::reconnectMQTT() {
 }
 
 void TheNetwork::connectBLE(){
-  BLEDevice::init("");
+  BLEDevice::init("BLE");
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9);
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV,     ESP_PWR_LVL_P9);
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN,    ESP_PWR_LVL_P9);
+  esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_CONN_HDL0, ESP_PWR_LVL_P9);
+
+  BLEAdvertising* advertising = BLEDevice::getAdvertising();
+  advertising->setMinInterval(160); // 100 ms
+  advertising->setMaxInterval(320); // 200 ms
+  advertising->start();
+
   BLEScanner = BLEDevice::getScan();  //create new scan
 
   BLEScanner->setActiveScan(true);  //active scan uses more power, but get results faster
@@ -37,9 +47,9 @@ void TheNetwork::loop() {
    if (!client.connected()) {
         reconnectMQTT();
     }
-    client.loop();
 
-    client.publish("test/test", "Hallo MQTT!");
+    client.loop();
+    
 }
 
 

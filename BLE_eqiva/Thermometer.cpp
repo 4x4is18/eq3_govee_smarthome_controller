@@ -7,7 +7,6 @@ void Thermometer::MyAdvertisedDeviceCallbacks::onResult(BLEAdvertisedDevice adve
       // Schleife über alle Devices
     for (int i = 0; i < parent->deviceCount; i++) {
           if (advertisedDevice.getAddress().toString().equals(parent->deviceConfig[i].macAddress)){
-          Serial.print(advertisedDevice.getAddress().toString());
           deviceIndex = i;
           unknownDevice = false;
           }
@@ -68,7 +67,6 @@ void Thermometer::decodeGovee(int len,uint8_t* dp, int deviceIndex){
           Temperature = -1.0 * Temperature;
       float	Humidity = float(iTemp % 1000) / 10.0;
       int Battery = int(dp[i+6]);
-      Serial.printf("T %3.1f H %3.1f B %d\n",Temperature,Humidity,Battery);
       publishGovee(Temperature,Humidity,Battery,deviceIndex);
 
       }
@@ -83,7 +81,6 @@ void Thermometer::decodeGovee(int len,uint8_t* dp, int deviceIndex){
         float Temperature = float(iTemp) / 100.0;
         float Humidity = float(iHumidity) / 100.0;
         int Battery = int(dp[i+7]);
-      Serial.printf("T %3.1f H %3.1f B %d\n",Temperature,Humidity,Battery);
       publishGovee(Temperature,Humidity,Battery,deviceIndex);
       }
       i+=flen-1;
@@ -96,7 +93,7 @@ void Thermometer::publishGovee(float temperature, float humidity, int battery,in
   char message[20];
 
    if (!mqttClient || !mqttClient->connected()) {
-        Serial.println("MQTT not connected");
+        Serial.println("Thermometer: MQTT not connected");
         return;
     }
 

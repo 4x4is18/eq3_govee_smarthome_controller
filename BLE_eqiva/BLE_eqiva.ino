@@ -16,7 +16,7 @@ BLEScan* pBLEScan;
 // Govee thermometer Management
 //Thermometer thermometer();
 Thermometer* thermometer;
-Thermostat* t[2];
+Thermostat* t[5];
 
 
 DeviceConfig deviceConfig;
@@ -36,9 +36,11 @@ void setup() {
   thermometer->setBLEScanner(networkBridge.getBLEScanner());
 
   //init the heater
-  t[0] = new Thermostat(heizungsThermostat[0], networkBridge.getMQTTClient());
-  t[1] = new Thermostat(heizungsThermostat[1], networkBridge.getMQTTClient());
-
+for (uint8_t i = 0; i < heizungsCount; i++) {
+  t[i] = new Thermostat(heizungsThermostat[i], networkBridge.getMQTTClient());
+  Serial.println(heizungsThermostat[i].name);
+}
+  
 };
 
 
@@ -54,20 +56,19 @@ void loop() {
 
 }
 
-// Wird aufgerufen, wenn eine MQTT-Nachricht ankommt
+// MQTT Callback
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
      String message = "";
     for (unsigned int i = 0; i < length; i++) {
         message += (char)payload[i];
     }
-    Serial.print("Topic: "); Serial.println(topic);
-    Serial.print("Message: "); Serial.println(message);
 
-    for (int i = 0; i < 2; i++) {  // Array durchlaufen
+    for (int i = 0; i < heizungsCount; i++) {
+
+        // find the id (last two mac adress blocks) in the topic
         if (String(topic).indexOf(heizungsThermostat[i].id) >= 0) {
             Serial.print("Thermostat gefunden: ");
             Serial.println(heizungsThermostat[i].name);
-
             t[i]->handleCommand(topic, payload, length);
 
         }

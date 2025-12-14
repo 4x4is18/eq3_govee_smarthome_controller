@@ -17,8 +17,7 @@ Thermostat::Thermostat(DeviceConfig& _deviceConfig, PubSubClient* client) : devi
   mqttClient = client; 
 
   char topic[100];
-  snprintf(topic, sizeof(topic),"home/%s/%s/%s/#",deviceConfig.room,deviceConfig.id,deviceConfig.deviceType);
-
+  snprintf(topic, sizeof(topic),"/home/%s/%s/%s/#",deviceConfig.room,deviceConfig.deviceType,deviceConfig.id);
   mqttClient->subscribe(topic);
   
   if (!connectToThermostat()) return;
@@ -75,8 +74,8 @@ bool Thermostat::setupCharacteristic() {
             bool windowOpen = data[3] == 0x01;
             uint8_t valvePercent = data[4];
             float temperature = data[5] / 2.0;
-
-            Serial.print("Locked: "); Serial.print(isLocked ? "Yes" : "No");
+            Serial.print(deviceConfig.name);
+            Serial.print(" |Locked: "); Serial.print(isLocked ? "Yes" : "No");
             Serial.print(" | Mode: "); Serial.print(mode);
             Serial.print(" | Window Open: "); Serial.print(windowOpen ? "Yes" : "No");
             Serial.print(" | Valve: "); Serial.print(valvePercent); Serial.print("%");
@@ -107,7 +106,9 @@ void Thermostat::setLock(boolean locked) {
 }
 
 void Thermostat::setTemperature(float temperature) {
+  Serial.println("Starte senden an die Heizung");
   if (!writeChar) {
+    Serial.println("Pröööblem");
       return;
     }
 
@@ -120,11 +121,12 @@ void Thermostat::setTemperature(float temperature) {
 
   writeChar->writeValue(payload, 2, true);
   delay(3000);
+  Serial.println("gesendet an die Heizung!");
 }
 
 void Thermostat::publishStatus(const char* message) {
     if (mqttClient && mqttClient->connected()) {
-        mqttClient->publish("test/topic", message);
+        mqttClient->publish("test/topic", message, true);
     }
 }
 
@@ -151,14 +153,18 @@ const char* Thermostat::toJson(bool isLocked, String mode, bool windowOpen, uint
 void Thermostat::handleCommand(char* topic, byte* payload, unsigned int length) {
 
     String command = extractCommand(topic);  // Command aus Topic extrahieren
-
+  	
     if (command == "setTemperature") {
         float temp = String((char*)payload, length).toFloat();
         setTemperature(temp);
     } else if (command == "getStatus") {
         //publishStatus();
     } else if (command == "setLock") {
-        //lock();
+        String value((char*)payload, length);
+        value.trim();
+        // you can use true/false or 1/0 for the payload
+        bool newStatus = value.equalsIgnoreCase("true") || value == "1";
+        setLock(newStatus);
     } else if (command == "boost") {
         //boostMode();
     }
@@ -168,7 +174,6 @@ String Thermostat::extractCommand(const char* topic) {
     String t(topic);
     int lastSlash = t.lastIndexOf('/');                     // letzter Slash
     if (lastSlash == -1) return "";                        // ungültiges Format
-
     String command = t.substring(lastSlash + 1);           // alles nach letztem Slash
     return command;
 }
