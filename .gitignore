@@ -2,3 +2,4 @@ ci.yml
 /nppBackup
 BLE_eqiva/DeviceConfig.cpp
 /BLE_eqiva/.theia
+BLE_eqiva/Config.h
