@@ -13,7 +13,7 @@ struct DeviceConfig {
 };
 
 // Instanzen
-extern int deviceCount;
+extern int thermoHygrometerCount;
 extern int heizungsCount;
 extern DeviceConfig thermoHygrometer[];
 extern DeviceConfig heizungsThermostat[];

@@ -1,32 +1,10 @@
 #include "Thermometer.h"
 
-void Thermometer::MyAdvertisedDeviceCallbacks::onResult(BLEAdvertisedDevice advertisedDevice) {
-    
-    bool unknownDevice = true;
-    int deviceIndex = -1;
-      // Schleife über alle Devices
-    for (int i = 0; i < parent->deviceCount; i++) {
-          if (advertisedDevice.getAddress().toString().equals(parent->deviceConfig[i].macAddress)){
-          deviceIndex = i;
-          unknownDevice = false;
-          }
-    }
-
-    if(unknownDevice || deviceIndex == -1) {
-      return;
-    }
-
-    int len = advertisedDevice.getPayloadLength();
-    uint8_t* dp = advertisedDevice.getPayload();
-    parent->decodeGovee(len, dp, deviceIndex);
-}
-
-Thermometer::Thermometer(PubSubClient* _client, DeviceConfig* _deviceConfig, int _length)
-    : deviceConfig(_deviceConfig), deviceCount(_length)
+Thermometer::Thermometer(TheNetwork& _networkBridge, DeviceConfig* _deviceConfig, int _deviceCount): networkBridge(_networkBridge)
 {
-    mqttClient = _client; 
+    deviceConfig = _deviceConfig;
+    deviceCount = _deviceCount;
 }
-
 
 void Thermometer::setBLEScanner(BLEScan* _pBLEScan){
   pBLEScan = _pBLEScan;
@@ -36,6 +14,39 @@ void Thermometer::setBLEScanner(BLEScan* _pBLEScan){
 void Thermometer::scan(){
   pBLEScan->start(5, false);
   pBLEScan->clearResults();  // delete results fromBLEScan buffer to release memory
+}
+
+
+// publish govee values to the networkBridge
+void Thermometer::publishGovee(float temperature, float humidity, int battery, int deviceIndex)
+{
+    // ---- Check 1: Check if deviceConfig and deviceIndex are correct ----
+    if (!deviceConfig) return;
+    if (deviceIndex < 0) return;
+
+    // check if you can build the topic string with room and type
+    const char* room = deviceConfig[deviceIndex].room;
+    const char* type = deviceConfig[deviceIndex].deviceType;
+    if (!room || !type) return;
+
+    // helper variables
+    char topic[128];
+    char payload[32];
+
+    // ---- TEMPERATURE ----
+    snprintf(topic, sizeof(topic),"home/%s/%s/temperature", room, type);
+    snprintf(payload, sizeof(payload),"%.1f", temperature);
+    networkBridge.sendMqttMessage(topic, payload);
+
+    // ---- HUMIDITY ----
+    snprintf(topic, sizeof(topic),"home/%s/%s/humidity", room, type);
+    snprintf(payload, sizeof(payload),"%.1f", humidity);
+    networkBridge.sendMqttMessage(topic, payload);
+
+    // ---- BATTERY ----
+    snprintf(topic, sizeof(topic),"home/%s/%s/battery", room, type);
+    snprintf(payload, sizeof(payload),"%d", battery);
+    networkBridge.sendMqttMessage(topic, payload);
 }
 
 void Thermometer::decodeGovee(int len,uint8_t* dp, int deviceIndex){
@@ -87,27 +98,25 @@ void Thermometer::decodeGovee(int len,uint8_t* dp, int deviceIndex){
    }
 }
 
-void Thermometer::publishGovee(float temperature, float humidity, int battery,int deviceIndex) {
-
-  char topic[100];
-  char message[20];
-
-   if (!mqttClient || !mqttClient->connected()) {
-        Serial.println("Thermometer: MQTT not connected");
-        return;
+void Thermometer::MyAdvertisedDeviceCallbacks::onResult(BLEAdvertisedDevice advertisedDevice) {
+    
+    bool unknownDevice = true;
+    int deviceIndex = -1;
+      // Schleife über alle Devices
+    for (int i = 0; i < parent->deviceCount; i++) {
+          if (advertisedDevice.getAddress().toString().equals(parent->deviceConfig[i].macAddress)){
+          deviceIndex = i;
+          unknownDevice = false;
+          }
+    }
+    
+    if(unknownDevice || deviceIndex == -1) {
+      return;
     }
 
-    // TEMPERATURE
-    snprintf(topic, sizeof(topic),"home/%s/%s/temperature",deviceConfig[deviceIndex].room,deviceConfig[deviceIndex].deviceType);
-    mqttClient->publish(topic, String(temperature, 1).c_str());
-
-    snprintf(topic, sizeof(topic),"home/%s/%s/humidity",deviceConfig[deviceIndex].room,deviceConfig[deviceIndex].deviceType);
-    mqttClient->publish(topic, String(humidity, 1).c_str());
-
-    snprintf(topic, sizeof(topic),"home/%s/%s/battery",deviceConfig[deviceIndex].room,deviceConfig[deviceIndex].deviceType);
-    snprintf(message, sizeof(message), "%d", battery);
-    mqttClient->publish(topic, message);
+    int len = advertisedDevice.getPayloadLength();
+    uint8_t* dp = advertisedDevice.getPayload();
+    parent->decodeGovee(len, dp, deviceIndex);
 }
-
 
 

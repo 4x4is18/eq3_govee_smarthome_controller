@@ -1,16 +1,21 @@
 #include "TheNetwork.h"
 
-TheNetwork::TheNetwork():client(espClient){}
+// Constructor
+// Init the mqttClient with the wifiClient
+TheNetwork::TheNetwork():mqttClient(wifiClient){
+
+}
 
 void TheNetwork::connectMQTT(const char* mqttServer, const int mqttPort) {
-    client.setServer(mqttServer, mqttPort);
+    mqttClient.setServer(mqttServer, mqttPort);
     reconnectMQTT();
 
 }
 
+// reconnect to MQTT Broker
 void TheNetwork::reconnectMQTT() {
-    while (!client.connected()) {
-        if (client.connect("ESP32Client")) {
+    while (!mqttClient.connected()) {
+        if (mqttClient.connect("ESP32Client")) {
             Serial.println("MQTT connected");
         } else {
             delay(500);
@@ -20,7 +25,11 @@ void TheNetwork::reconnectMQTT() {
 }
 
 void TheNetwork::connectBLE(){
+
+  // Start the BLE Connection
   BLEDevice::init("BLE");
+
+  // no idea that it does. Maybe empower the BLE connection
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9);
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV,     ESP_PWR_LVL_P9);
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_SCAN,    ESP_PWR_LVL_P9);
@@ -44,15 +53,11 @@ BLEScan* TheNetwork::getBLEScanner(){
 
 
 void TheNetwork::loop() {
-   if (!client.connected()) {
+   if (!mqttClient.connected()) {
         reconnectMQTT();
     }
-
-    client.loop();
-    
+    mqttClient.loop();
 }
-
-
 
 void TheNetwork::connectWiFi(const char* _ssid, const char* _password) {
     
@@ -71,7 +76,31 @@ void TheNetwork::connectWiFi(const char* _ssid, const char* _password) {
     Serial.println("WiFi connected!");
     Serial.println(WiFi.localIP());
 
-
 }
 
-PubSubClient* TheNetwork::getMQTTClient() { return &client; }
+
+PubSubClient* TheNetwork::getMQTTClient() {
+  return &mqttClient; 
+}
+
+// Sends messages to the mqtt Broker
+bool TheNetwork::sendMqttMessage(const char* topic, const char* payload) {
+
+  if (!mqttClient.connected()) {
+    Serial.println("MQTT not connected");
+    return false;
+  }
+
+  if (topic == nullptr || payload == nullptr) {
+    Serial.println("NULL topic or payload");
+    return false;
+  }
+
+  return mqttClient.publish(topic, payload);
+
+
+
+};
+
+
+

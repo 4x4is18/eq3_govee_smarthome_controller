@@ -15,11 +15,12 @@ class TheNetwork {
     void connectBLE();
     PubSubClient* getMQTTClient();
     BLEScan* getBLEScanner();
+    bool sendMqttMessage(const char* topic, const char* payload);
 
   private:
     void reconnectMQTT();
-    WiFiClient espClient;
-    PubSubClient client;
+    WiFiClient wifiClient;
+    PubSubClient mqttClient;
     BLEScan* BLEScanner;
 };
 

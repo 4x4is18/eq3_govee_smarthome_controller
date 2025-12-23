@@ -9,12 +9,12 @@
 #include <BLEEddystoneTLM.h>
 #include <BLEBeacon.h>
 #include <BLEUtils.h>
-#include <PubSubClient.h>
+#include "TheNetwork.h"
 #include "DeviceConfig.h"
 
 class Thermometer {
   public:
-    Thermometer(PubSubClient* client, DeviceConfig* deviceConfig, int length);
+    Thermometer(TheNetwork& networkBridge, DeviceConfig* deviceConfig, int deviceCount);
     void setBLEScanner(BLEScan* _pBLEScan);
     void scan();
 
@@ -33,7 +33,7 @@ class Thermometer {
     int deviceCount;
     void reconnectMQTT();
     BLEScan* pBLEScan;
-    PubSubClient* mqttClient;
+    TheNetwork& networkBridge;
     void decodeGovee(int len, uint8_t* dp, int deviceIndex);
     void publishGovee(float temperature, float humidity, int battery, int deviceIndex);
 };

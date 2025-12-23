@@ -30,8 +30,6 @@ class Thermostat {
   BLERemoteCharacteristic* writeChar;
   BLERemoteCharacteristic* notifyChar;
   PubSubClient* mqttClient;
-  
-
 };
 
 #endif

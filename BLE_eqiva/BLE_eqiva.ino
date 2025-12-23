@@ -16,8 +16,7 @@ BLEScan* pBLEScan;
 // Govee thermometer Management
 //Thermometer thermometer();
 Thermometer* thermometer;
-Thermostat* t[5];
-
+Thermostat* t[2];
 
 DeviceConfig deviceConfig;
 
@@ -32,18 +31,15 @@ void setup() {
   networkBridge.connectBLE();
 
   // Start the Govee thermometer scanner
-  thermometer = new Thermometer(networkBridge.getMQTTClient(), thermoHygrometer, deviceCount);
+  thermometer = new Thermometer(networkBridge, thermoHygrometer, thermoHygrometerCount);
   thermometer->setBLEScanner(networkBridge.getBLEScanner());
 
-  //init the heater
-for (uint8_t i = 0; i < heizungsCount; i++) {
-  t[i] = new Thermostat(heizungsThermostat[i], networkBridge.getMQTTClient());
-  Serial.println(heizungsThermostat[i].name);
-}
-  
+  //   //init the heater
+  // for (uint8_t i = 0; i < heizungsCount; i++) {
+  //   t[i] = new Thermostat(heizungsThermostat[i], networkBridge.getMQTTClient());
+  //   Serial.println(heizungsThermostat[i].name);
+  // }
 };
-
-
 
 void loop() {
 
