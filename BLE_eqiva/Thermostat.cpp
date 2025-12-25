@@ -26,8 +26,8 @@ Thermostat::Thermostat(DeviceConfig& _deviceConfig, PubSubClient* client) : devi
 }
 
 bool Thermostat::connectToThermostat() {
-    pClient = BLEDevice::createClient();
-    if (!pClient->connect(BLEAddress(deviceConfig.macAddress))) {
+    NimBLEAddress addr(std::string(deviceConfig.macAddress), BLE_ADDR_PUBLIC);
+    if (!pClient->connect(addr)) {
         return false;
     }
     return true;
@@ -56,7 +56,9 @@ bool Thermostat::setupCharacteristic() {
 
     // Notification registrieren
     if (notifyChar->canNotify()) {
-        notifyChar->registerForNotify([this](BLERemoteCharacteristic* rc, uint8_t* data, size_t length, bool isNotify) {
+        notifyChar->subscribe(true,[this](NimBLERemoteCharacteristic* rc, uint8_t* data,
+           size_t length,
+           bool isNotify) {
             if (length < 6) return;
 
             bool isLocked = data[1] == 0x20;

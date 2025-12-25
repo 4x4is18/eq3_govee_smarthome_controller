@@ -27,7 +27,7 @@ void TheNetwork::reconnectMQTT() {
 void TheNetwork::connectBLE(){
 
   // Start the BLE Connection
-  BLEDevice::init("BLE");
+  NimBLEDevice::init("");
 
   // no idea that it does. Maybe empower the BLE connection
   esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P9);
@@ -40,15 +40,16 @@ void TheNetwork::connectBLE(){
   advertising->setMaxInterval(320); // 200 ms
   advertising->start();
 
-  BLEScanner = BLEDevice::getScan();  //create new scan
-
-  BLEScanner->setActiveScan(true);  //active scan uses more power, but get results faster
-  BLEScanner->setInterval(100);
-  BLEScanner->setWindow(99);  // less or equal setInterval value
+    scan = NimBLEDevice::getScan();  //create new scan
+    //scan->setAdvertisedDeviceCallbacks(&advCallbacks, true);
+    //scan->setScanCallbacks(&scanCallbacks);
+    scan->setActiveScan(true);     // active scan = request scan response
+    scan->setInterval(48);
+    scan->setWindow(48);
 }
 
-BLEScan* TheNetwork::getBLEScanner(){
-  return BLEScanner;
+NimBLEScan* TheNetwork::getBLEScanner(){
+  return scan;
 }
 
 
@@ -87,8 +88,7 @@ PubSubClient* TheNetwork::getMQTTClient() {
 bool TheNetwork::sendMqttMessage(const char* topic, const char* payload) {
 
   if (!mqttClient.connected()) {
-    Serial.println("MQTT not connected");
-    return false;
+    reconnectMQTT();
   }
 
   if (topic == nullptr || payload == nullptr) {
@@ -97,8 +97,6 @@ bool TheNetwork::sendMqttMessage(const char* topic, const char* payload) {
   }
 
   return mqttClient.publish(topic, payload);
-
-
 
 };
 

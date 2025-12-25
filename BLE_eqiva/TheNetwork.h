@@ -3,8 +3,7 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <BLEDevice.h>
-#include <BLEUtils.h>
+#include <NimBLEDevice.h>
 
 class TheNetwork {
   public:
@@ -14,14 +13,14 @@ class TheNetwork {
     void connectMQTT(const char* mqttServer, const int mqttPort);
     void connectBLE();
     PubSubClient* getMQTTClient();
-    BLEScan* getBLEScanner();
+    NimBLEScan* getBLEScanner();
     bool sendMqttMessage(const char* topic, const char* payload);
 
   private:
     void reconnectMQTT();
     WiFiClient wifiClient;
     PubSubClient mqttClient;
-    BLEScan* BLEScanner;
+    NimBLEScan* scan;
 };
 
 #endif

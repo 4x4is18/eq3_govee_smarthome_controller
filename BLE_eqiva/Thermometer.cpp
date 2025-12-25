@@ -1,21 +1,18 @@
 #include "Thermometer.h"
 
-Thermometer::Thermometer(TheNetwork& _networkBridge, DeviceConfig* _deviceConfig, int _deviceCount): networkBridge(_networkBridge)
-{
+Thermometer::Thermometer(TheNetwork& _networkBridge, DeviceConfig* _deviceConfig, int _deviceCount): networkBridge(_networkBridge){
     deviceConfig = _deviceConfig;
     deviceCount = _deviceCount;
 }
 
-void Thermometer::setBLEScanner(BLEScan* _pBLEScan){
+void Thermometer::setBLEScanner(NimBLEScan* _pBLEScan){
   pBLEScan = _pBLEScan;
-  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(this),true);
+  pBLEScan->setScanCallbacks(&scanCallbacks, false);
 }
 
-void Thermometer::scan(){
-  pBLEScan->start(5, false);
-  pBLEScan->clearResults();  // delete results fromBLEScan buffer to release memory
+void Thermometer::scan(const unsigned long scanInterval){
+  pBLEScan->start(scanInterval, false, true);
 }
-
 
 // publish govee values to the networkBridge
 void Thermometer::publishGovee(float temperature, float humidity, int battery, int deviceIndex)
@@ -29,94 +26,151 @@ void Thermometer::publishGovee(float temperature, float humidity, int battery, i
     const char* type = deviceConfig[deviceIndex].deviceType;
     if (!room || !type) return;
 
-    // helper variables
-    char topic[128];
-    char payload[32];
+    // just in case there is a problem
+    Message msgTemp, msgHum, msgBatt;
 
     // ---- TEMPERATURE ----
-    snprintf(topic, sizeof(topic),"home/%s/%s/temperature", room, type);
-    snprintf(payload, sizeof(payload),"%.1f", temperature);
-    networkBridge.sendMqttMessage(topic, payload);
+    snprintf(msgTemp.topic, sizeof(msgTemp.topic),"home/%s/%s/temperature", room, type);
+    snprintf(msgTemp.payload, sizeof(msgTemp.payload),"%.1f", temperature);
+    //networkBridge.sendMqttMessage(topic, payload);
+    xQueueSend(bleToMqttQueue, &msgTemp, 0);
 
     // ---- HUMIDITY ----
-    snprintf(topic, sizeof(topic),"home/%s/%s/humidity", room, type);
-    snprintf(payload, sizeof(payload),"%.1f", humidity);
-    networkBridge.sendMqttMessage(topic, payload);
+    snprintf(msgHum.topic, sizeof(msgHum.topic),"home/%s/%s/humidity", room, type);
+    snprintf(msgHum.payload, sizeof(msgHum.payload),"%.1f", humidity);
+    xQueueSend(bleToMqttQueue, &msgHum, 0);
 
-    // ---- BATTERY ----
-    snprintf(topic, sizeof(topic),"home/%s/%s/battery", room, type);
-    snprintf(payload, sizeof(payload),"%d", battery);
-    networkBridge.sendMqttMessage(topic, payload);
+    // // ---- BATTERY ----
+    snprintf(msgBatt.topic, sizeof(msgBatt.topic),"home/%s/%s/battery", room, type);
+    snprintf(msgBatt.payload, sizeof(msgBatt.payload),"%d", battery);
+    xQueueSend(bleToMqttQueue, &msgBatt, 0);
 }
 
-void Thermometer::decodeGovee(int len,uint8_t* dp, int deviceIndex){
-
-      for (int i = 0; i < len; i++) 
+// Decode Govee BLE payload into temperature, humidity, battery
+// Returns true if decoding succeeded, false otherwise
+bool Thermometer::decodeGovee(int len, const uint8_t* dp, int deviceIndex,float& outTemperature, float& outHumidity, int& outBattery){
+    for (int i = 0; i < len; i++)
     {
-     // Serial.printf("i %d len %d\n",i,len);
-      int flen,ftype; 
-      flen=dp[i++]-1; //0
-      ftype=dp[i++]; //1
-      // fdata at dp[i], size flen
-      for(int j=0;j<flen;j++)
-      {
-        if((j+i)>=len) break; 
-        int c=dp[j+i];
-       // if(c>=32 && c<127) Serial.printf("%c",c );
-       // else               Serial.printf("[%X]",c );
-      }
-      if(flen==8 && ftype==0xFF && dp[i+0]==0x88 && dp[i+1]==0xec)
-      {
-      int iTemp = int(dp[i+3]) << 16 | int(dp[i+4]) << 8 | int(dp[i+5]);
-      bool bNegative = iTemp & 0x800000;	// check sign bit
-      iTemp = iTemp & 0x7ffff;			// mask off sign bit
-      float Temperature = float(iTemp / 1000) / 10.0; // issue #49 fix. 
-        // After converting the hexadecimal number into decimal the first three digits are the 
-        // temperature and the last three digits are the humidity.So "03519e" converts to "217502" 
-        // which means 21.7 °C and 50.2 % humidity without any rounding.
-      if (bNegative)						// apply sign bit
-          Temperature = -1.0 * Temperature;
-      float	Humidity = float(iTemp % 1000) / 10.0;
-      int Battery = int(dp[i+6]);
-      publishGovee(Temperature,Humidity,Battery,deviceIndex);
+        int flen = dp[i++] - 1; // field length
+        int ftype = dp[i++];    // field type
 
-      }
-      else
-      if(flen==9 && ftype==0xFF && dp[i+0]==0x88 && dp[i+1]==0xec)
-      {
-        // This data came from https://github.com/neilsheps/GoveeTemperatureAndHumidity
-        // 88EC00 0902 CD15 64 02 (Temp) 41.378°F (Humidity) 55.81% (Battery) 100%
-        // 2 3 4  5 6  7 8  9
-        short iTemp = short(dp[i+4]) << 8 | short(dp[i+3]);
-        int iHumidity = int(dp[i+6]) << 8 | int(dp[i+5]);
-        float Temperature = float(iTemp) / 100.0;
-        float Humidity = float(iHumidity) / 100.0;
-        int Battery = int(dp[i+7]);
-      publishGovee(Temperature,Humidity,Battery,deviceIndex);
-      }
-      i+=flen-1;
-   }
+        // Bounds check
+        if (i + flen > len) break;
+
+        // Example: loop over raw data bytes (optional for debugging)
+        // for (int j = 0; j < flen; j++) {
+        //     int c = dp[i + j];
+        //     Serial.printf("[%02X]", c);
+        // }
+
+        // --- Case 1: 8-byte Govee payload ---
+        if (flen == 8 && ftype == 0xFF && dp[i + 0] == 0x88 && dp[i + 1] == 0xEC)
+        {
+            int iTemp = int(dp[i + 3]) << 16 | int(dp[i + 4]) << 8 | int(dp[i + 5]);
+            bool bNegative = iTemp & 0x800000;    // sign bit
+            iTemp &= 0x7FFFF;                     // mask off sign bit
+
+            float temperature = float(iTemp / 1000) / 10.0;
+            if (bNegative) temperature = -temperature;
+
+            float humidity = float(iTemp % 1000) / 10.0;
+            int battery = int(dp[i + 6]);
+
+            outTemperature = temperature;
+            outHumidity = humidity;
+            outBattery = battery;
+
+            return true; // decoded successfully
+        }
+
+        // --- Case 2: 9-byte Govee payload ---
+        if (flen == 9 && ftype == 0xFF && dp[i + 0] == 0x88 && dp[i + 1] == 0xEC)
+        {
+            short iTemp = short(dp[i + 4]) << 8 | short(dp[i + 3]);
+            int iHumidity = int(dp[i + 6]) << 8 | int(dp[i + 5]);
+
+            float temperature = float(iTemp) / 100.0;
+            float humidity = float(iHumidity) / 100.0;
+            int battery = int(dp[i + 7]);
+
+            outTemperature = temperature;
+            outHumidity = humidity;
+            outBattery = battery;
+
+            return true; // decoded successfully
+        }
+
+        i += flen - 1; // skip to next field
+    }
+
+    return false; // no valid data found
 }
 
-void Thermometer::MyAdvertisedDeviceCallbacks::onResult(BLEAdvertisedDevice advertisedDevice) {
+void Thermometer::MyScanCallbacks::onResult(const NimBLEAdvertisedDevice* advertisedDevice) {
     
-    bool unknownDevice = true;
+     //Serial.printf("Found BLE device: %s\n", advertisedDevice->toString().c_str());
+    // Danach deine MAC-Filterung
+
+        // --- Find the device index ---
     int deviceIndex = -1;
-      // Schleife über alle Devices
     for (int i = 0; i < parent->deviceCount; i++) {
-          if (advertisedDevice.getAddress().toString().equals(parent->deviceConfig[i].macAddress)){
-          deviceIndex = i;
-          unknownDevice = false;
-          }
+        if (advertisedDevice->getAddress().toString() == std::string(parent->deviceConfig[i].macAddress)) {
+            deviceIndex = i;
+            break;
+        }
     }
-    
-    if(unknownDevice || deviceIndex == -1) {
-      return;
-    }
+    if (deviceIndex == -1) return; // unknown device
 
-    int len = advertisedDevice.getPayloadLength();
-    uint8_t* dp = advertisedDevice.getPayload();
-    parent->decodeGovee(len, dp, deviceIndex);
+   // --- Decode sensor data ---
+    const auto& payload = advertisedDevice->getPayload();
+    int len = payload.size();
+    const uint8_t* dp = payload.data();
+    float temperature, humidity;
+    int battery;
+
+     // Assume decodeGovee can optionally return values instead of immediately publishing
+    parent->decodeGovee(len, dp, deviceIndex, temperature, humidity, battery);
+
+    // --- Store in map to filter duplicates ---
+    parent->scanResults[deviceIndex] = std::make_tuple(temperature, humidity, battery);
+
+
 }
 
+void Thermometer::MyScanCallbacks::onScanEnd(const NimBLEScanResults& results, int reason) {
 
+    Serial.printf("=== Scan Ended (reason %d) ===\n", reason);
+    Serial.printf("Devices found: %d\n", (int)parent->scanResults.size());
+
+    // Loop through all collected scanResults (duplicates automatically removed)
+    for (const auto& [deviceIndex, values] : parent->scanResults) {
+        float temperature, humidity;
+        int battery;
+        std::tie(temperature, humidity, battery) = values;
+
+        Message msg;
+
+        const char* room = parent->deviceConfig[deviceIndex].room;
+        const char* type = parent->deviceConfig[deviceIndex].deviceType;
+
+         Serial.printf("Device Index %d - Room: %s, Type: %s\n", deviceIndex, room, type);
+        Serial.printf("Temperature: %.1f, Humidity: %.1f, Battery: %d\n",
+                      temperature, humidity, battery);
+
+        // ---- TEMPERATURE ----
+        snprintf(msg.topic, sizeof(msg.topic), "home/%s/%s/temperature", room, type);
+        snprintf(msg.payload, sizeof(msg.payload), "%.1f", temperature);
+        xQueueSend(bleToMqttQueue, &msg, 0);
+
+        // ---- HUMIDITY ----
+        snprintf(msg.topic, sizeof(msg.topic), "home/%s/%s/humidity", room, type);
+        snprintf(msg.payload, sizeof(msg.payload), "%.1f", humidity);
+        xQueueSend(bleToMqttQueue, &msg, 0);
+
+        // ---- BATTERY ----
+        snprintf(msg.topic, sizeof(msg.topic), "home/%s/%s/battery", room, type);
+        snprintf(msg.payload, sizeof(msg.payload), "%d", battery);
+        xQueueSend(bleToMqttQueue, &msg, 0);
+
+    }
+}

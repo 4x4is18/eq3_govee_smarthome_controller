@@ -2,40 +2,43 @@
 #define THERMOMETER_H
 
 // TODO: Do we need all of them?
-#include <BLEDevice.h>
-#include <BLEScan.h>
-#include <BLEAdvertisedDevice.h>
-#include <BLEEddystoneURL.h>
-#include <BLEEddystoneTLM.h>
-#include <BLEBeacon.h>
-#include <BLEUtils.h>
+#include <NimBLEDevice.h> // main NimBLE library
+#include <map>
+#include <tuple>
 #include "TheNetwork.h"
 #include "DeviceConfig.h"
+#include "Globals.h"
 
 class Thermometer {
   public:
     Thermometer(TheNetwork& networkBridge, DeviceConfig* deviceConfig, int deviceCount);
-    void setBLEScanner(BLEScan* _pBLEScan);
-    void scan();
+    void setBLEScanner(NimBLEScan* _pBLEScan);
+    void scan(const unsigned long scanInterval);
 
   private:
 
-    // callback class. TODO: works for the moment. Ugly af
-    class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+    // Scan callback
+    class MyScanCallbacks : public NimBLEScanCallbacks {
     public:
-        MyAdvertisedDeviceCallbacks(Thermometer* p) : parent(p) {}
-        void onResult(BLEAdvertisedDevice advertisedDevice) override;
+        MyScanCallbacks(Thermometer* parent) : parent(parent) {}
+        void onResult(const NimBLEAdvertisedDevice* advertisedDevice) override;
+        void onScanEnd(const NimBLEScanResults& results, int reason) override;
 
     private:
         Thermometer* parent;
     };
+
+    MyScanCallbacks scanCallbacks{this};
+
+
     DeviceConfig* deviceConfig;
     int deviceCount;
     void reconnectMQTT();
-    BLEScan* pBLEScan;
+    NimBLEScan* pBLEScan;
     TheNetwork& networkBridge;
-    void decodeGovee(int len, uint8_t* dp, int deviceIndex);
+    bool decodeGovee(int len, const uint8_t* dp, int deviceIndex,float& outTemperature, float& outHumidity, int& outBattery);
     void publishGovee(float temperature, float humidity, int battery, int deviceIndex);
+    std::map<int, std::tuple<float, float, int>> scanResults;  // Temporary storage for duplicate filtering
 };
 
 #endif

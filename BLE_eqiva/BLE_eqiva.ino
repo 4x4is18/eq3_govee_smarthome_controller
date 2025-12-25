@@ -4,6 +4,8 @@
 #include "Thermostat.h"
 #include "Thermometer.h"
 #include "TheNetwork.h"
+#include "Globals.h"
+#include "Message.h"
 
 // heater in the working room
 Thermostat* buro;
@@ -11,7 +13,6 @@ Thermostat* wohn;
 
 // Wifi, MQTT and BLE Management
 TheNetwork networkBridge;
-BLEScan* pBLEScan;
 
 // Govee thermometer Management
 //Thermometer thermometer();
@@ -20,8 +21,19 @@ Thermostat* t[2];
 
 DeviceConfig deviceConfig;
 
+unsigned long lastScanTime = 0; // helper for BLE scan
+
 void setup() {
   Serial.begin(115200);
+
+  // Init the two queues
+  bleToMqttQueue = xQueueCreate(10, sizeof(Message));
+  mqttToBleQueue = xQueueCreate(10, sizeof(Message));
+
+  if (!bleToMqttQueue || !mqttToBleQueue) {
+    Serial.println("Queue creation failed");
+    while (true);
+  }
 
   // Start Wifi, MQTT and BLE
   networkBridge.connectWiFi(WIFI_SSID,WIFI_PASSWORD);
@@ -33,22 +45,31 @@ void setup() {
   // Start the Govee thermometer scanner
   thermometer = new Thermometer(networkBridge, thermoHygrometer, thermoHygrometerCount);
   thermometer->setBLEScanner(networkBridge.getBLEScanner());
-
+  thermometer->scan(scanInterval);
   //   //init the heater
   // for (uint8_t i = 0; i < heizungsCount; i++) {
   //   t[i] = new Thermostat(heizungsThermostat[i], networkBridge.getMQTTClient());
   //   Serial.println(heizungsThermostat[i].name);
-  // }
+  //}
 };
 
 void loop() {
 
   // scan for new broadcast information
-  //thermometerWohn->scan();
-  thermometer->scan();
-  delay(5000);
+   unsigned long now = millis();
+  if (now - lastScanTime >= scanPauseInterval) {
+    lastScanTime = now;
+    thermometer->scan(scanInterval);
+  }
 
   networkBridge.getMQTTClient()->loop();
+
+  Message msg;
+  while (xQueueReceive(bleToMqttQueue, &msg, 0) == pdTRUE) {
+    if (networkBridge.getMQTTClient()->connected()) {
+      networkBridge.getMQTTClient()->publish(msg.topic, msg.payload);
+    }
+  }
 
 }
 

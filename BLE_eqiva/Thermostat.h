@@ -2,8 +2,7 @@
 #define THERMOSTAT_H
 
 
-#include <BLEClient.h>
-#include <BLERemoteCharacteristic.h>
+#include <NimBLEDevice.h>
 #include <PubSubClient.h>
 #include "DeviceConfig.h"
 
